@@ -1,7 +1,8 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { makeStyles } from '@material-ui/core/styles';
 import { Typography, Slider, ButtonGroup, Button, TextField } from '@material-ui/core';
 import CheckboxButton from './survey-view/checkbox-button/CheckboxButton';
+import { useBlockstack } from 'react-blockstack';
 
 // custome style for material ui elements
 const useStyles = makeStyles({
@@ -63,9 +64,8 @@ const marks = [
 
 
 const SymptomsTracker = () => {
-
+  const { userSession } = useBlockstack();
   const childRef = useRef();
-
   const classes = useStyles();
 
   // emulate dynamic state in a fuctional component
@@ -91,16 +91,47 @@ const SymptomsTracker = () => {
     setAdditionalInfo(e)
   }
 
+  let numObservations = 0;
+
+  const fetchFile = async () => {
+    const decryptOptions = { decrypt: true };
+    let i;
+    console.log(numObservations)
+    for (i = 0; i < numObservations; i++) {
+      const file = await userSession.getFile(`observation${numObservations}.json`, decryptOptions)
+      let observation = JSON.parse(file || "[]");
+      console.log(observation)
+      userSession.deleteFile('observation3.json')
+    }
+  }
+
+  useEffect(() => {
+    const num = userSession.listFiles(() => {
+      numObservations++
+    }).then(() => {
+      console.log(num)
+      fetchFile()
+    })
+  })
+
   // aggregate collected data
-  const submitSurvey = () => {
-    childRef.current.submitSurvey()
+  const submitSurvey = async () => {
     const submission = {
       todayFeeling: todayFeeling,
       todaySymptoms: todaySymptoms,
       comparedFeeling: comparedFeeling,
       additionalInfo: additionalInfo
     }
-    // TODO save this state in Redux
+
+    const observation = childRef.current.createObservation(submission)
+    const encryptOptions = { encrypt: true };
+    console.log(numObservations)
+    userSession.putFile(`observation${numObservations+1}.json`, JSON.stringify(observation.attrs), encryptOptions).then((res) => {
+      console.log(res)
+    }).catch(err => {
+      console.log(err)
+    })
+
   }
 
   return (
@@ -140,7 +171,7 @@ const SymptomsTracker = () => {
         <Button onClick={e => handlerComparedFeeling(e.target.innerText)}>Better</Button>
       </ButtonGroup>
 
-      <CheckboxButton ref={childRef}/>
+      <CheckboxButton ref={childRef} />
 
       <Typography>Anything you'd like to share?</Typography>
       <TextField onChange={e => handlerAdditionalInfo(e.target.value)} />
